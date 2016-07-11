@@ -1,0 +1,111 @@
+---
+title: "Parliamentary Money in Brazil"
+author: "Stênio Elson"
+date: "July 8, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## About the data
+
+The parliamentaries receive a certain amount of money to spend with their needs and staff. The details of with what, where, when and how much was spent are accessible freely and openly to any person. The original data may be found [here](http://www2.camara.leg.br/transparencia/cota-para-exercicio-da-atividade-parlamentar/dados-abertos-cota-parlamentar). The file is originaly available in XML, but it was converted for CSV by [nazareno](https://github.com/nazareno) in order to be easily used in this article. All the data is from 2016.  
+
+#### The file structure
+
+```{r, message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(knitr)
+
+untar("data/ano-atual.csv.tgz", files="ano-atual.csv", exdir="temp")
+
+source("https://github.com/nazareno/ciencia-de-dados-1/raw/master/1-EDA/problema%201/gastos_lib.R")
+
+expenses = ler_gastos("temp/ano-atual.csv")
+quota_state = read.csv("data/valor-cota-por-estado.csv")
+```
+
+There are `r nrow(expenses)` observations and `r ncol(expenses)` variables in the dataset file.  
+
+The name of the variables are:  
+```{r}
+colnames(expenses)
+```
+
+The meanings of the variables may be found at the Camara's website linked at the begining of this page.  
+
+In Brazil each state has a quota for month for its parliamentary. It is supposed they will not use more than that.  
+
+```{r}
+quota_bar = ggplot(quota_state) +
+  geom_bar(aes(x = reorder(estado, valor), y = valor),
+           stat = "identity", fill = "#64B5F6") +
+  coord_flip() +
+  labs(title = "Quota by State",
+       y = "Amount in Reais (R$)",
+       x = "State") +
+  theme_minimal()
+
+quota_bar
+```
+
+At a first moment it is interesting to see if there are parliamentaries that has spent more than their Quota. If there are, how many per state? I don't know if they need to explain why the expenses were over the quota, but it looks like it is something normal among the parliamentaries. As you can see:
+
+```{r}
+parliamentary_per_party = expenses %>%
+  group_by(sgUF) %>%
+  summarise(parliamentaries = length(unique(nuDeputadoId)))
+
+over_quota = expenses %>%
+  left_join(quota_state, by = c("sgUF" = "estado")) %>%
+  select(
+    sgPartido, nuDeputadoId, txNomeParlamentar, sgUF,
+    numMes, datEmissao, vlrDocumento, vlrLiquido,
+    vlrRestituicao, quota = valor) %>%
+  group_by(nuDeputadoId, sgUF, numMes, quota) %>%
+  summarise(expensesMonth = sum(vlrDocumento))
+
+f <- function(quota, expensesMonth) {
+  options = c("OVER", "UNDER")
+  result = options[(quota > expensesMonth) + 1]
+  return(result)
+}
+over_quota = over_quota %>%
+  mutate(over = f(quota, expensesMonth))
+  
+
+ggplot(over_quota, aes(x = sgUF)) +
+  geom_bar(aes(fill = over)) +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Times That The Expenses Was Under Or Over The Quota",
+       y = "Times",
+       x = "State",
+       legend = "OVer")
+
+parl_over = over_quota %>%
+  group_by(nuDeputadoId) %>%
+  summarise(over = min(unique(over))) %>%
+  filter(!is.na(over)) %>%
+  group_by(over) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count*100/sum(count), 2))
+
+perc = ggplot(parl_over, aes(x = "", y = percentage)) +
+  geom_bar(aes(fill = over, width = 1), stat = "identity") +
+  coord_polar("y") +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+    axis.ticks = element_blank()
+  ) +
+  geom_text(aes(y = percentage/3 + c(0,cumsum(percentage)[-length(percentage)]),
+                label = paste(percentage, "%")), size=rel(5)) +
+  ggtitle("Parliamentaries That Spent More Than The Quota")
+
+perc
+```
+You have noticied that there are a category called **NA** in the chart. It appeared over there because there are some parliamentaries that are not registered as part of one state. More research need to be made in order to verify if those parliamentary are allowed to use the public money to any of those activities, or if they have a limit of use.
