@@ -2,7 +2,7 @@
 title: "Parliamentary Money in Brazil"
 author: "Stênio Elson"
 date: "July 8, 2016"
-output: html_document
+output: word_document
 ---
 
 ```{r setup, include=FALSE}
@@ -37,9 +37,11 @@ colnames(expenses)
 
 The meanings of the variables may be found at the Camara's website linked at the begining of this page.  
 
+#### About the Quota
+
 In Brazil each state has a quota for month for its parliamentary. It is supposed they will not use more than that.  
 
-```{r}
+```{r fig.align="center"}
 quota_bar = ggplot(quota_state) +
   geom_bar(aes(x = reorder(estado, valor), y = valor),
            stat = "identity", fill = "#64B5F6") +
@@ -54,7 +56,7 @@ quota_bar
 
 At a first moment it is interesting to see if there are parliamentaries that has spent more than their Quota. If there are, how many per state? I don't know if they need to explain why the expenses were over the quota, but it looks like it is something normal among the parliamentaries. As you can see:
 
-```{r}
+```{r fig.align="center"}
 parliamentary_per_party = expenses %>%
   group_by(sgUF) %>%
   summarise(parliamentaries = length(unique(nuDeputadoId)))
@@ -65,7 +67,7 @@ over_quota = expenses %>%
     sgPartido, nuDeputadoId, txNomeParlamentar, sgUF,
     numMes, datEmissao, vlrDocumento, vlrLiquido,
     vlrRestituicao, quota = valor) %>%
-  group_by(nuDeputadoId, sgUF, numMes, quota) %>%
+  group_by(nuDeputadoId, txNomeParlamentar, sgUF, numMes, quota) %>%
   summarise(expensesMonth = sum(vlrDocumento))
 
 f <- function(quota, expensesMonth) {
@@ -81,11 +83,13 @@ ggplot(over_quota, aes(x = sgUF)) +
   geom_bar(aes(fill = over)) +
   coord_flip() +
   theme_minimal() +
-  labs(title = "Times That The Expenses Was Under Or Over The Quota",
+  labs(title = "Time That The Expenses Were Under Or Over The Quota",
        y = "Times",
        x = "State",
        legend = "OVer")
+```
 
+```{r fig.align="center"}
 parl_over = over_quota %>%
   group_by(nuDeputadoId) %>%
   summarise(over = min(unique(over))) %>%
@@ -97,15 +101,63 @@ parl_over = over_quota %>%
 perc = ggplot(parl_over, aes(x = "", y = percentage)) +
   geom_bar(aes(fill = over, width = 1), stat = "identity") +
   coord_polar("y") +
-  theme_minimal() +
-  theme(
-    axis.title = element_blank(),
-    axis.ticks = element_blank()
-  ) +
+  theme_void() +
   geom_text(aes(y = percentage/3 + c(0,cumsum(percentage)[-length(percentage)]),
                 label = paste(percentage, "%")), size=rel(5)) +
   ggtitle("Parliamentaries That Spent More Than The Quota")
 
 perc
 ```
-You have noticied that there are a category called **NA** in the chart. It appeared over there because there are some parliamentaries that are not registered as part of one state. More research need to be made in order to verify if those parliamentary are allowed to use the public money to any of those activities, or if they have a limit of use.
+
+You have noticied that there are a category called **NA** in the chart **Time That The Expenses Were Under Or Over The Quota**. It appeared over there because there are some parliamentaries that are not registered as part of one state. More research need to be made in order to verify if those parliamentary are allowed to use the public money to any of those activities, or if they have a limit of use.  
+The parliamentaries that are not listed in a state are:
+```{r fig.align="center"}
+not_listed_state = over_quota %>%
+  filter(is.na(sgUF)) %>%
+  group_by(txNomeParlamentar) %>%
+  summarize(totalExpenses = sum(expensesMonth)) %>%
+  arrange(desc(totalExpenses)) %>%
+  rename("Parlimentary" = txNomeParlamentar,
+         "Total Expenses (R$)" = totalExpenses)
+
+kable(not_listed_state)
+```
+
+##### Some questions
+As a first approach, some questions should be made in relation to these data. They are:
+a. In Which categories are spent more money by the Brazillian parliamentary?
+b. Which expenses are the ones that have a greater variation?
+
+There are `r length(unique(expenses$txtDescricao))` categories of expenses in the data. Some of them look like a derivation of another one, but for some reason it was decided different ones. Until the gathering of these data, it was spent `r sum(expenses$vlrDocumento)` Reais.  
+
+To answer the first Question (a) I used the following bar chart:
+
+```{r fig.align="center", fig.width = 10}
+expenses_category = expenses %>%
+  group_by(txtDescricao) %>%
+  summarise(total_expenses = sum(vlrDocumento))
+
+ggplot(expenses_category,
+       aes(x = reorder(txtDescricao, total_expenses), y = total_expenses / 1e+6)) +
+  geom_bar(stat = "identity", fill = "#64B5F6") +
+  theme_minimal() +
+  theme(
+    axis.title.y = element_blank(),
+    legend.position = "none"
+  ) +
+  ylab("Amout in Million of Reais (R$)") +
+  ggtitle("Amount of Money by Category") +
+  coord_flip()
+  
+```
+
+To answer the second question (b) I used the density chart, it shows the concentration of money spent in a region.
+
+#TO-DO
+```{r fig.height = 30, fig.align = "center"}
+ggplot(expenses) +
+  geom_density(kernel = "gaussian", mapping = aes(x = vlrDocumento/1000)) +
+  theme_minimal() +
+  facet_wrap(~ txtDescricao, ncol = 1)
+```
+
