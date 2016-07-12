@@ -1,8 +1,7 @@
 ---
 title: "Parliamentary Money in Brazil"
-author: "Stênio Elson"
 date: "July 8, 2016"
-output: word_document
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -11,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## About the data
 
-The parliamentaries receive a certain amount of money to spend with their needs and staff. The details of with what, where, when and how much was spent are accessible freely and openly to any person. The original data may be found [here](http://www2.camara.leg.br/transparencia/cota-para-exercicio-da-atividade-parlamentar/dados-abertos-cota-parlamentar). The file is originaly available in XML, but it was converted for CSV by [nazareno](https://github.com/nazareno) in order to be easily used in this article. All the data is from 2016.  
+The parliamentarians receive a certain amount of money to spend with their needs and staff. The details of with what, where, when and how much they spend is accessible freely and openly to any person. The original data may be found [here](http://www2.camara.leg.br/transparencia/cota-para-exercicio-da-atividade-parlamentar/dados-abertos-cota-parlamentar). The file is originally available in XML, but it was converted to CSV by [nazareno](https://github.com/nazareno) in order to be easily used in this article. All the data is from 2016.  
 
 #### The file structure
 
@@ -35,11 +34,17 @@ The name of the variables are:
 colnames(expenses)
 ```
 
-The meanings of the variables may be found at the Camara's website linked at the begining of this page.  
+The meanings of the variables may be found at the Camara's website linked at the beginning of this page.  
 
-#### About the Quota
+A little summary of the values spent may be seen below.
 
-In Brazil each state has a quota for month for its parliamentary. It is supposed they will not use more than that.  
+```{r}
+summary(expenses$vlrDocumento)
+```
+
+## About the Quota
+
+In Brazil each state has a quota per month for its parliamentarians. It is assumed they will not use more than that.
 
 ```{r fig.align="center"}
 quota_bar = ggplot(quota_state) +
@@ -54,7 +59,7 @@ quota_bar = ggplot(quota_state) +
 quota_bar
 ```
 
-At a first moment it is interesting to see if there are parliamentaries that has spent more than their Quota. If there are, how many per state? I don't know if they need to explain why the expenses were over the quota, but it looks like it is something normal among the parliamentaries. As you can see:
+At first glance, it is interesting to see if there are parliamentarians that have spent more than their Quota. If there are, how many per state? I don't know if they need to explain why the expenses were over the quota, but it looks like it is something normal among the parliamentarians. As you can see:
 
 ```{r fig.align="center"}
 parliamentary_per_party = expenses %>%
@@ -104,31 +109,29 @@ perc = ggplot(parl_over, aes(x = "", y = percentage)) +
   theme_void() +
   geom_text(aes(y = percentage/3 + c(0,cumsum(percentage)[-length(percentage)]),
                 label = paste(percentage, "%")), size=rel(5)) +
-  ggtitle("Parliamentaries That Spent More Than The Quota")
+  ggtitle("Parliamentarians That Spent More Than The Quota")
 
 perc
 ```
 
-You have noticied that there are a category called **NA** in the chart **Time That The Expenses Were Under Or Over The Quota**. It appeared over there because there are some parliamentaries that are not registered as part of one state. More research need to be made in order to verify if those parliamentary are allowed to use the public money to any of those activities, or if they have a limit of use.  
-The parliamentaries that are not listed in a state are:
+You may have noticed that there is a category called **NA** in the chart **Time That The Expenses Were Under Or Over The Quota**. It appears there because there are some parliamentarians that are not registered as part of one state. More research needs to be done in order to verify if those parliamentarians are allowed to use the public's money to any of the activities, or if they have any limits to their use.
+The parliamentarians that are not listed in a state are:
+
 ```{r fig.align="center"}
 not_listed_state = over_quota %>%
   filter(is.na(sgUF)) %>%
   group_by(txNomeParlamentar) %>%
   summarize(totalExpenses = sum(expensesMonth)) %>%
   arrange(desc(totalExpenses)) %>%
-  rename("Parlimentary" = txNomeParlamentar,
+  rename("Parliamentarian" = txNomeParlamentar,
          "Total Expenses (R$)" = totalExpenses)
 
 kable(not_listed_state)
 ```
 
-##### Some questions
-As a first approach, some questions should be made in relation to these data. They are:
-a. In Which categories are spent more money by the Brazillian parliamentary?
-b. Which expenses are the ones that have a greater variation?
-
-There are `r length(unique(expenses$txtDescricao))` categories of expenses in the data. Some of them look like a derivation of another one, but for some reason it was decided different ones. Until the gathering of these data, it was spent `r sum(expenses$vlrDocumento)` Reais.  
+## Some questions
+As a first approach, some questions should be made in relation to this data. They are: a. In which categories do the Brazilian parliament spend the most money? &  b. Which expenses are the ones that have a greater variation?
+There are `r length(unique(expenses$txtDescricao))` categories of expenses in the data. Some of them look like a derivation of other ones, but for some reason they were placed separately. When this data was collected `r sum(expenses$vlrDocumento)` Reais were spent.
 
 To answer the first Question (a) I used the following bar chart:
 
@@ -151,13 +154,18 @@ ggplot(expenses_category,
   
 ```
 
-To answer the second question (b) I used the density chart, it shows the concentration of money spent in a region.
+To answer the second question (b) I used the density chart. It shows the concentration of money spent in a region.
 
-#TO-DO
 ```{r fig.height = 30, fig.align = "center"}
 ggplot(expenses) +
-  geom_density(kernel = "gaussian", mapping = aes(x = vlrDocumento/1000)) +
+  geom_density(kernel = "gaussian", mapping = aes(x = vlrDocumento)) +
   theme_minimal() +
-  facet_wrap(~ txtDescricao, ncol = 1)
+  facet_wrap(~ txtDescricao, ncol = 1) +
+  ylab("Category") +
+  xlab("Amout of Money (R$)")
 ```
 
+#### Conclusion
+In almost all cases, the Parliamentarians didn't stick to their States's quota. This may show that there is no law enforcing any restrictions. Also, some types of expenses do have a common distribution between their values. However, in cases such as "DIVULGÇÂO DA ATIVIDADE PARLAMENTAR", the use of the money is not the same for all the parliamentarians. 
+
+This is a sensitive topic to talk about, especially based on the current situation of Brazil.
