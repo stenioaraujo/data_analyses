@@ -1,0 +1,205 @@
+---
+title: "Dinheiro parlamentar no Brasil"
+date: "July 18, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r message=FALSE, echo=FALSE}
+library(dplyr)
+library(ggplot2)
+library(knitr)
+
+untar("data/ano-atual.csv.tgz", files="ano-atual.csv", exdir="temp")
+
+source("https://github.com/nazareno/ciencia-de-dados-1/raw/master/1-EDA/problema%201/gastos_lib.R")
+
+format_number <- function(x) {
+  return(format(x, big.mark = ",", scientific = FALSE))
+}
+
+expenses = ler_gastos("temp/ano-atual.csv")
+quota_state = read.csv("data/valor-cota-por-estado.csv")
+```
+## Sobre
+
+Este Relatório é uma continuação da análise descritiva e interpretativa iniciada previamente. O arquivo utilizado foi introduzido inicialmente no outro relatório, o qual pode ser encontrado [aqui](https://r.kyaa.sg/xpovdo.html).
+
+O intuito desta nova parte é responder a algumas perguntas que foram criadas a partir da observação dos dados e resultados obtidos no estudo anterior. Questões relacionadas ao o uso do dinheiro gasto por nossos parlamentares e a concentração do mesmo.
+
+Em um primeiro momento duas questões foram levantadas:
+
+  1. Em alguns gastos com tickets de avião o passageiro não é o deputado, com que frequência isso acontece? Qual o impacto disso no gasto total de passagens?
+  
+  2. Quais as empresas que mais arrecadaram com os gastos dos parlamentares? Elas tem algo em comum?
+
+Ambas as questões focam em descobrir, ou ao menos tentar, algum uso suspeito do dinheiro público, alguns como gasto excessivo em passagens com terceiros, ou concentração de poucas empresas para alguns gastos.
+
+## Perguntas
+
+#### Em alguns gastos com tickets de avião o passageiro não é o deputado, com que frequência isso acontece? Qual o impacto disso no gasto total de passagens?
+
+```{r message = FALSE}
+total_passagem_aerea = expenses %>%
+  filter(txtDescricao == "Emissão Bilhete Aéreo" | txtDescricao == "PASSAGENS AÉREAS") %>%
+  summarise(total = sum(vlrDocumento),
+            maior = max(vlrDocumento),
+            menor = min(vlrDocumento),
+            media = mean(vlrDocumento))
+
+kable(total_passagem_aerea)
+```
+
+O gasto com tickets de avião entre janeiro e julho deste ano dos parlamentares chegou a R$ `r format_number(total_passagem_aerea$total)`, onde o maior valor gasto foi R$ `r format_number(total_passagem_aerea$maior)`. Um gasto que pode ser considerado exorbitante para apenas 7 meses. Neste sentido, para responder a primeira questão utilizarei as seguintes variáveis:
+
+```{r, echo=FALSE}
+Variavel = c("txNomeParlamentar", "txtDescricao", "vlrDocumento", "txtPassageiro")
+Descricao = c(
+  "Nome adotado pelo Parlamentar ao tomar posse do seu mandato. Compõe-se de dois elementos: um prenome e o nome; dois nomes; ou dois prenomes, salvo, a juízo do Presidente da Casa legislativa, que poderá alterar essa regra para que não ocorram confusões.",
+  "O seu conteúdo é a descrição do Tipo de Despesa relativo à despesa em questão.",
+  "O seu conteúdo é o valor de face do documento fiscal ou o valor do documento que deu causa à despesa. Quando se tratar de bilhete aéreo, esse valor poderá ser negativo, significando que o referido bilhete é um bilhete de compensação, pois compensa um outro bilhete emitido e não utilizado pelo deputado.",
+  "O conteúdo deste dado representa o nome do passageiro, quando o documento que deu causa à despesa se tratar de emissão de bilhete aéreo.")
+
+variaveis_com_descricao = data.frame(Variavel, Descricao)
+
+kable(variaveis_com_descricao)
+```
+
+Para responder a primeira parte da pergunta, com que frequência isso acontece utilizarei apenas um valor, o qual representa a quantidade de vezes que o nome do passageiro foi diferente do nome do parlamentar.
+
+```{r}
+parlamentar_passagem_diferente = expenses %>%
+  filter(!is.na(txtPassageiro), txNomeParlamentar != txtPassageiro)
+
+vezes_que_foi_diferente = parlamentar_passagem_diferente %>%
+  summarise(total_gastos = sum(vlrDocumento), frequencia = n())
+```
+
+No total `r format_number(vezes_que_foi_diferente$frequencia)` passagens de avião foram emitidos para outra pessoa que não o deputado. Um número considerável de vezes. Uma melhor análise precisa ser feita para verificar se tais pessoas poderiam ou não receber tais passagens.
+
+Qual o impacto disto no gasto total das passagens?
+
+```{r fig.align="center"}
+gastos = c(vezes_que_foi_diferente$total_gastos, total_passagem_aerea$total - vezes_que_foi_diferente$total_gastos)
+Diferente = c("DIFERENTE", "NAO DIFERENTE")
+diferentes = data.frame(gastos, Diferente)
+
+impacto = diferentes %>%
+  mutate(percentage = round(gastos*100/sum(gastos), 2))
+
+perc = ggplot(impacto, aes(x = "", y = percentage)) +
+  geom_bar(aes(fill = Diferente, width = 1), stat = "identity") +
+  coord_polar("y") +
+  theme_void() +
+  geom_text(aes(y = percentage/1.5 + c(0,cumsum(percentage)[-length(percentage)]),
+                label = paste(percentage, "%")), size=rel(5)) +
+  ggtitle("Passageiro Diferente Do Parlamentar")
+
+perc
+```
+
+Ao todo R$ `r format_number(vezes_que_foi_diferente$total_gastos)` foram gastos com passagens aéreas na qual o Parlamentar não era o passageiro. Eu não esperava um valor tão alto.
+
+#### Quais as empresas que mais arrecadaram com esses gastos? Elas tem algo em comum?
+
+Recentemente temos escutado que muitos dos parlamentares utilizam o dinheiro de forma indevida, facilitando a compra em uma determinada empresa para benefício própio. A livre concorrência é uma característica que deveria ser vista ao longo dos gastos dos nossos parlamentares. Minha inteção é verificar se uma quantidade muito alta de gastos esta concentrada em apenas uma empresa, ou se há uma distribuição que pareça adequada.
+
+Para isto foram selecionadas as variáveis:
+
+```{r echo=FALSE}
+Variavel = c("txtCNPJCPF", "txtFornecedor", "vlrDocumento", "txtDescricao")
+Descricao = c(
+  "O conteúdo deste dado representa o CNPJ ou o CPF do emitente do documento fiscal, quando se tratar do uso da cota em razão do reembolso despesas comprovadas pela emissão de documentos fiscais.",
+  "O conteúdo deste dado representa o nome do fornecedor do produto ou serviço presente no documento fiscal.",
+  "O seu conteúdo é o valor de face do documento fiscal ou o valor do documento que deu causa à despesa. Quando se tratar de bilhete aéreo, esse valor poderá ser negativo, significando que o referido bilhete é um bilhete de compensação, pois compensa um outro bilhete emitido e não utilizado pelo deputado.",
+  "O seu conteúdo é a descrição do Tipo de Despesa relativo à despesa em questão.")
+
+variaveis_com_descricao = data.frame(Variavel, Descricao)
+
+kable(variaveis_com_descricao)
+```
+
+Para responder a a esta pergunta, utilizei o gráfico de barras abaixo com as 20 primeiras empresas/pessoas que mais receberam dinheiros dos parlamentares:
+
+```{r, fig.align="center"}
+expenses_company = expenses %>%
+  arrange(desc(vlrDocumento)) %>%
+  group_by(txtCNPJCPF, txtFornecedor, txtDescricao) %>%
+  summarise(total_expenses = sum(vlrDocumento)) %>%
+  arrange(desc(total_expenses)) %>%
+  head(20)
+
+douglas = expenses_company %>%
+  filter(txtCNPJCPF == "22005529000130")
+
+ggplot(expenses_company,
+       aes(x = reorder(txtFornecedor, total_expenses), y = total_expenses / 1e+6)) +
+  geom_bar(stat = "identity", fill = "#64B5F6") +
+  theme_minimal() +
+  theme(
+    axis.title.y = element_blank(),
+    legend.position = "none"
+  ) +
+  ylab("Quantidade em Milhões de Reais (R$)") +
+  ggtitle("Quantidade de Dinheiro por Companhia") +
+  coord_flip()
+```
+
+É interessante notar que o gasto com passagens de avião realmente são os mais altos, visto que os parlamentares precisam viajar para o congresso para as sessões. Um valor que é interessante é o do Douglas Cunha Da Silva. Ele esta marcado como Consultor nos dados. O mesmo é advogado, de janeiro pra julho já recebeu R$ `r format_number(douglas$total_expenses)`. Douglas trabalha com a elaboração de projetos de lei para os deputados.
+
+### Mais Questionamentos
+
+Os resultados das questões anteriores me levaram a questionar o seguinte:
+
+1. Qual o parlamentar que teve uma maior participação nos gastos de passagens aéreas em que o passageiro era diferente do parlamentar?
+
+2. Quais os parlamentares que mais utilizaram os serviços do Douglas Cunha?
+
+#### Qual o parlamentar que teve uma maior participação nos gastos de passagens aéreas em que o passageiro era diferente do parlamentar?
+
+Aprofundando um pouco mais o levantamento dos dados nas mesmas variáveis selecionadas anteriormente cheguei ao seguinte resultado:
+
+```{r}
+parlamentar_mais_diferente = parlamentar_passagem_diferente %>%
+  group_by(txNomeParlamentar) %>%
+  summarise(total_gasto = sum(vlrDocumento)) %>%
+  arrange(desc(total_gasto)) %>%
+  head(1)
+```
+
+O deputado `r parlamentar_mais_diferente$txNomeParlamentar` gastou R$ `r format_number(parlamentar_mais_diferente$total_gasto)` com passagens de avião que não são em seu nome.
+
+Ao olhar uma das pessoas que foram beneficiadas pela passagem, e fazer algumas pesquisas no site da câmara dos deputados, encontrei que ela era Secretária parlamentar do Deputado.
+
+Acredito que os deputados possa comprar passagens para seus funcnionários. Não sei se existe um limite para isto entretanto.
+
+#### Quais os parlamentares que mais utilizaram os serviços do Douglas Cunha?
+
+Dentre os parlamentares que utilizaram os Serviços do advogado Douglas Cunha da Silva, estão:
+
+```{r, fig.align="center"}
+gastos_com_douglas = expenses  %>%
+  filter(txtCNPJCPF == "22005529000130") %>%
+  group_by(txNomeParlamentar) %>%
+  summarise(total_gasto = sum(vlrDocumento))
+
+ggplot(gastos_com_douglas,
+       aes(x = reorder(txNomeParlamentar, total_gasto), y = total_gasto)) +
+  geom_bar(stat = "identity", fill = "#64B5F6") +
+  theme_minimal() +
+  theme(
+    axis.title.y = element_blank(),
+    legend.position = "none"
+  ) +
+  ylab("Quantidade em Reais (R$)") +
+  ggtitle("Gastos Com Douglas Cunha") +
+  coord_flip()
+```
+
+Interessante, apenas 11 deputados são responsáveis pelos gastos com O Advogado Douglas Cunha. Fiquei um pouo surpreso, eu acreditava que mais deputados iriam utilizar os serviços deles.
+
+## Conclusão
+
+É notável a necessidade do uso do dinheiro público para o transporte dos parlamentares de seus estados a Câmara dos deputados, entretanto é um pouco estranho que todos os valores sejam tão altos, principalmente os relacionados a consultoria. É de me espantar que uma quantia tão alta tenha sido gasta com a "criação" de projetos de lei. Me deixa a impressão de que o único trabalho que estes que utilizaram tal serviço tem é o de escolher a pessoa que irá fazer este serviço para ele.
