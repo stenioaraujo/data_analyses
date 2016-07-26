@@ -160,12 +160,12 @@ To answer the second question (b) I used the density chart. It shows the concent
 ggplot(expenses) +
   geom_density(kernel = "gaussian", mapping = aes(x = vlrDocumento)) +
   theme_minimal() +
-  facet_wrap(~ txtDescricao, ncol = 1) +
+  facet_wrap(~ txtDescricao, ncol = 1, scales = "free") +
   ylab("Category") +
   xlab("Amout of Money (R$)")
 ```
 
 #### Conclusion
-In almost all cases, the Parliamentarians didn't stick to their States's quota. This may show that there is no law enforcing any restrictions. Also, some types of expenses do have a common distribution between their values. However, in cases such as "DIVULGÇÂO DA ATIVIDADE PARLAMENTAR", the use of the money is not the same for all the parliamentarians. 
+In almost all cases, the Parliamentarians didn't stick to their States's quota. This may show that there is no law enforcing any restrictions. Also, some types of expenses do have a common distribution between their values. However, in cases such as "DIVULG??O DA ATIVIDADE PARLAMENTAR", the use of the money is not the same for all the parliamentarians. 
 
 This is a sensitive topic to talk about, especially based on the current situation of Brazil.
