@@ -1,0 +1,52 @@
+---
+title: "Distribuição dos Gastos do Parlamentares"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE, echo=FALSE}
+library(dplyr)
+library(ggplot2)
+library(knitr)
+
+untar("data/ano-atual.csv.tgz", files="ano-atual.csv", exdir="temp")
+
+source("https://github.com/nazareno/ciencia-de-dados-1/raw/master/1-EDA/problema%201/gastos_lib.R")
+
+expenses = ler_gastos("temp/ano-atual.csv")
+quota_state = read.csv("data/valor-cota-por-estado.csv")
+```
+## Sobre
+Este arquivo é uma extensão de duas outras análises, [esta](https://r.kyaa.sg/xpovdo.html) e [esta](https://r.kyaa.sg/evfiyf.html).
+
+Em meu [primeiro trabalho](https://r.kyaa.sg/xpovdo.html) eu tentei mostrar a distribuição de gastos nas diferentes categorias, entretanto a viualiação da mesma não ficou legível. Desta forma, a intenção com esta análise é melhorar tal gráfico de forma a permitir uma maior legibilidade.
+
+Outra decisão foi tomada, devido a quantidade de informação e categorias, resolvi limitar meu escopo para aquelas categorias que mais se assemelham, para que seja possível fazer uma comparação mais justa entre essas distribuições. Também, resolvi focar em dois principais partidos, PT e PSDB, devido aos últimos e atuais acontecimentos no Brasil.
+
+## O Gráfico
+
+``` {r echo = FALSE, fig.width = 10, fig.height = 15,  fig.align = "center"}
+pt_psdb = expenses %>%
+  filter(sgPartido == "PT" | sgPartido == "PSDB") %>%
+  filter(txtDescricao == "TELEFONIA" |
+	      txtDescricao == "PASSAGENS AÉREAS" |
+	      txtDescricao == "Emissão Bilhete Aéreo" |
+	      txtDescricao == "MANUTENÇÃO DE ESCRITÓRIO DE APOIO À ATIVIDADE PARLAMENTAR") %>%
+  rename(Partido = sgPartido)
+
+pt_psdb[pt_psdb$txtDescricao == "Emissão Bilhete Aéreo", "txtDescricao"] = "PASSAGENS AÉREAS"
+pt_psdb$txtDescricao = droplevels(pt_psdb$txtDescricao)
+
+pt_psdb$Partido <- factor(pt_psdb$Partido, levels = c("PT", "PSDB"))
+
+ggplot(pt_psdb, aes(x=vlrDocumento, color=Partido, fill=Partido)) + 
+ geom_histogram(alpha=0.5, position="identity", binwidth = 100) +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  facet_wrap(~ txtDescricao, ncol = 1, scales = "free") +
+  ylab("") +
+  xlab("Valor do Documento (R$)")
+```
+
