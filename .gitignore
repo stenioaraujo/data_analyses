@@ -6,3 +6,5 @@ parliamentary_money.Rproj
 .Rproj.user
 parliamentary_money/parliamentary_money.docx
 *.html
+parliamentary_money/gastos_por_regiao/ano-atual.csv
+rsconnect

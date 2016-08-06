@@ -1,23 +1,15 @@
-#
-# This is the server logic of a Shiny web application. You can run the 
-# application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-# 
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
 library(dplyr)
 library(ggplot2)
 library(knitr)
+library(scales)
+library(RColorBrewer)
 
 num = as.numeric
 
 ######## RETRIEVING THE DATA #####################
-untar("../data/ano-atual.csv.tgz", files="ano-atual.csv", exdir="../temp")
-source("https://github.com/nazareno/ciencia-de-dados-1/raw/master/1-EDA/problema%201/gastos_lib.R")
-expenses = ler_gastos("../temp/ano-atual.csv")
+source("gastos_lib.R")
+expenses = ler_gastos("ano-atual.csv")
 
 ######## PREPARING THE DATA ######################
 ### Identify the politicians by Brazilian regions
@@ -30,6 +22,8 @@ regiaoSigla = function(state) {
     pr=,sc=,rs = "SUL"
   )
 }
+
+#### SHRINKING DESCRIPTIONS ####
 map = new.env()
 map[["Emissão Bilhete Aéreo"]] = "PASSAGENS AÉREAS"
 map[["DIVULGAÇÃO DA ATIVIDADE PARLAMENTAR."]] = "DIVULGAÇÃO"
@@ -58,46 +52,74 @@ expenses = expenses %>%
   mutate(regiao = sapply(sgUF, regiaoSigla),
          descricao = sapply(as.character(txtDescricao), tipo))
 
+
+##### THIS FUNCITON WILL BE CALLED EVERYTIME WE UPDATE THE FILTERS ####
+filterExpenses = function(input) {
+  expenses %>%
+    filter(regiao %in% input$regioes,
+           descricao %in% input$descricoes,
+           sgPartido %in% input$partidos) %>%
+    return()
+}
+
 shinyServer(function(input, output) {
    
   #expenses by Region
   output$regioes = renderPlot({
     
-    regioes = expenses %>%
+    expensesFiltered = filterExpenses(input)
+    
+    regioes = expensesFiltered %>%
       group_by(regiao) %>%
       summarise(total = sum(vlrDocumento))
     
     ggplot(regioes, aes(x = reorder(regiao, total),
                         y = total, fill = regiao)) +
       geom_bar(stat = "identity") +
+      scale_y_continuous(labels = comma) +
+      labs(x = "",
+             y = "Totais gastos") +
       coord_flip() +
-      theme_minimal()
+      theme_minimal() +
+      theme(legend.position = "none")
   })
   
   #expenses by kind of expenses
   output$tipoGasto = renderPlot({
     
-    tipoGasto = expenses %>%
+    expensesFiltered = filterExpenses(input)
+    
+    tipoGasto = expensesFiltered %>%
       group_by(descricao, regiao) %>%
       summarise(total = sum(vlrDocumento))
     
     ggplot(tipoGasto, aes(x = reorder(descricao, total), 
                           y = total, fill = regiao)) +
       geom_bar(stat = "identity", position = "dodge") +
+      scale_y_continuous(labels = comma) +
+      labs(x = "Tipo de Gasto",
+             y = "Totais gastos") +
       coord_flip() +
-      theme_minimal()
+      theme_minimal() +
+      theme(legend.position = "none")
   })
   
   output$partidos = renderPlot({
     
-    partidos = expenses %>%
+    expensesFiltered = filterExpenses(input)
+    
+    partidos = expensesFiltered %>%
       group_by(sgPartido, regiao) %>%
       summarise(total = sum(vlrDocumento))
     
     ggplot(partidos, aes(x = reorder(sgPartido, total), 
                           y = total, fill = regiao)) +
       geom_bar(stat = "identity", position = "dodge") +
+      scale_y_continuous(labels = comma) +
+      labs(x = "Partido",
+             y = "Totais gastos") +
       coord_flip() +
-      theme_minimal()
+      theme_minimal() +
+      theme(legend.position = "none")
   })
 })
