@@ -1,0 +1,63 @@
+---
+title: "Emendas"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(ggdendro)
+library(cluster)
+
+untar("data/emendas_detalhes_parlamentar.csv.tgz", files="emendas_detalhes_parlamentar.csv", exdir="temp")
+
+emendas = tbl_df(read_csv("temp/emendas_detalhes_parlamentar.csv"))
+emendasArea = tbl_df(read_csv("data/emendas_area_parlamentar.csv"))
+```
+
+## Sobre o documento
+
+Esse documento blablabla
+
+Ao total estão listados os pedidos de emenda de `r unique(emendas %>% select(NOME_PARLAMENTAR)) %>% count()` parlamentares. Com um total de `r colnames(emendas) %>% length()` variáveis.
+
+## Analisando os dados
+Ao tentar fazer um clustering no arquivo em que as propostas das emendas foram agrupadas por Função Imputada, utilizando o clustering hierárquico, obtive algo difícil de entender. A principal razão para isto acontecer é, a quantidade de parlamentares, comissões e bancadas é muito grande. Visto isso, é necessário seguir outra abordagem. (Cada final de linha a direita representa um parlamentar, comissão ou bancada)
+```{r, fig.height=20}
+emendas_for_clustering = emendasArea %>% 
+  select(-NOME_PARLAMENTAR)
+
+emendas_dist =  emendas_for_clustering %>% 
+  dist(method = "euclidean")
+
+emendas_hclust = emendas_dist %>% 
+  hclust(method = "ward.D")
+
+dhc <- as.dendrogram(emendas_hclust)
+
+ddata <- dendro_data(dhc, type = "rectangle")
+
+ggplot(segment(ddata)) + 
+  geom_segment(aes(x = x, y = y, xend = xend, yend = yend)) + 
+  coord_flip() +
+  scale_y_reverse(expand = c(0.2, 0)) +
+  theme_dendro() +
+  ggtitle("Parlamentares Agrupados Por Área - Dendrograma")
+```
+
+Neste caso tentativas em utilizar o k-means foram feitas, usando para isso como referência o gráfico de silhuetas para diferentes quantidades de clusters. Até chegar a um gráfico:
+
+```{r fig.height=20}
+plot(silhouette(cutree(emendas_hclust, k = 3), emendas_dist),
+     main = "Gráfico de silhueta")
+```
+
+Três clusters parecem se adequar bem aos dados dos políticos.
+
+
+
+
+
+
