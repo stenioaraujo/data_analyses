@@ -50,8 +50,10 @@ ggplot(segment(ddata)) +
 Neste caso tentativas em utilizar o k-means foram feitas, usando para isso como referência o gráfico de silhuetas para diferentes quantidades de clusters. Até chegar a um gráfico:
 
 ```{r fig.height=20}
-plot(silhouette(cutree(emendas_hclust, k = 3), emendas_dist),
+for (i in 2:40) {
+plot(silhouette(cutree(emendas_hclust, k = i), emendas_dist),
      main = "Gráfico de silhueta")
+}
 ```
 
 Três clusters parecem se adequar bem aos dados dos políticos.

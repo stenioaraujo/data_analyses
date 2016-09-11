@@ -1,0 +1,120 @@
+---
+title: "Movie Ratings"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(readr)
+library(resample)
+library(stringr)
+```
+
+# Sobre o arquivo
+O datasaet aqui utilizado é uma coleção de avaliações do tipo 5 estrelas e sistema de tags livres. Os dados são do sistema de recomendação MovieLens. Ele contém no total 105,339 mil avaliações e 6,138 tags num total de 10,329 filmes. As informações foram geradas por 668 usuários entre 03 de Abril de 1996 e 09 de Janeiro de 2016. O arquivo final deste dataset foi gerado no dia 11 de Janeiro de 2016.
+
+Este dataset é apenas uma amostra dos dados reais. Os usuários foram selecionados aleatóriamente. Todos os usuários selecionados tinham ao menos 20 avaliações feitas. Nenhuma informação outra que um id para identificar o usuário individualmente no dataset foram dadas.
+
+# Questões para Inferência
+1. Escolha uma trilogia (ou uma n-logia com n > 3) e avalie para qual dos episódios da trilogia há melhor avaliação e para qual há mais variação nas notas atribuídas ao filme. (Exemplos: Poderoso Chefão, Star Wars, Matrix, etc.)
+2. Normalmente os filmes têm vários gêneros. Existe uma relação entre em quantos gêneros os filmes se encaixam e a avaliação que os filmes recebem? Mais especificamente: se consideramos a os filmes com 1, 2, 3 ... gêneros, existe alguma quantidade de gêneros num mesmo filme que em geral recebe avaliações melhores? Caso exista, estime a diferença entre essa combinação e filmes com apenas um gênero. (Repare que você terá que escolher que medida você comparará: média, mediana, etc.)
+
+```{r message=FALSE}
+movies = read_csv("data/movies.csv")
+links = read_csv("data/links.csv")
+ratings = read_csv("data/ratings.csv")
+tags = read_csv("data/tags.csv")
+
+movies = movies %>%
+  mutate(n_genres = str_count(genres, "\\|") + 1)
+
+movies_ratings = movies %>%
+  left_join(ratings, by = c("movieId" = "movieId"))
+```
+
+### Escolha uma trilogia
+A trilogia escolhida foi Toy Story, franquia que teve seu primeiro filme lançado em 1995. Este foi o primeiro filme animação lançado pela Pixar, e teve um grande público.
+
+Para esta análise o filme foi escolhido por ter uma quantidade significante de avaliações por filme, como visto abaixo.
+
+```{r}
+toy_story = movies_ratings %>%
+  filter(grepl("Toy Story", title))
+
+toy_story_by_movie = toy_story %>%
+  group_by(title) %>%
+  summarise(number_of_ratings = n(),
+            mean = mean(rating),
+            median = median(rating),
+            standard_deviation = sd(rating))
+
+kable(toy_story_by_movie)
+```
+
+```{r fig.width=10}
+toy_story_bar = ggplot(toy_story, aes(x = rating, group = title)) + geom_bar() + facet_wrap(~ title) + theme_bw()
+
+toy_story_bar.vlinedata = toy_story %>%
+  group_by(title) %>%
+  summarise(rating_mean = mean(rating), rating_median = median(rating))
+
+toy_story_bar +
+  geom_vline(aes(xintercept=rating_mean), 
+                           toy_story_bar.vlinedata, color="red") +
+  geom_vline(aes(xintercept=rating_median), 
+                           toy_story_bar.vlinedata, color="blue") +
+  ylab("Ocorrência") +
+  xlab("Avaliação")
+```
+<center>
+<span style="color:blue">Azul</span> é para a mediana e <span style="color:red">Vermelho</span> apra a média 
+</center>
+
+
+A distribuição das avaliações se mostra bem equilibrada. Tanto a média quando a mediana parecem estar bem próximas uma da outra. Por este motivo e por eu concordar que a opinião de cada usuário deva ter um impacto na avaliação geral do filme, eu escolhi a média. A mediana tem uma valor mais forte com relação a variação dos valores na amostra, entretanto isso significaria que um usuário não teria um impacto tão significativo na avaliação total do filme.
+
+Para responder a primeira questão, utilizaremos o bootstrap como ferramenta para encontrar um intervalo de confiança para a população baseado na amostra que temos.
+
+#### Para qual filme da trilogia há melhor avaliação?
+Como a média foi escolhida para representar a avaliação geral, uma inferência em cima dessa medida foi feita. O processo de bootstrap para gerar o intervalo de confiança para a avaliação geral da população foi baseado no trabalho feito por [nazareno](https://github.com/nazareno/ciencia-de-dados-1/tree/master/4-Inferencia).
+
+O intervalo com confiança de 95% é mostrado abaixo
+```{r}
+probs = c(0.025, 0.975)
+
+b = bootstrap(filter(toy_story, movieId == 1),
+              mean(rating), R = 10000,
+              statisticNames = "Toy Story (1995)")
+mean.t1 = CI.bca(b, probs = probs)
+
+b = bootstrap(filter(toy_story, movieId == 3114),
+              mean(rating), R = 10000,
+              statisticNames = "Toy Story 2 (1999)")
+mean.t2 = CI.bca(b, probs = probs)
+
+b = bootstrap(filter(toy_story, movieId == 78499),
+              mean(rating), R = 10000,
+              statisticNames = "Toy Story 3 (2010)")
+mean.t3 = CI.bca(b, probs = probs)
+
+df = data.frame(rbind(mean.t1,
+                      mean.t2,
+                      mean.t3))
+
+df$medidas = row.names(df)
+
+df %>% 
+  ggplot(aes(x = df$medidas, ymin = X2.5., ymax = X97.5.)) + 
+  geom_errorbar(width = .2) +
+  theme_minimal() +
+  ggtitle("IC das Avaliações dos Filmes") +
+  xlab("Intervalos de confiança")
+```
+
+Como os intervalos de confiança se sobrepõe, não é possível afirmar diretamente qual o filme que teve a melhor avaliação apenas olhando para os itnervalos de confiança separadamente.
+
+[TODO]
