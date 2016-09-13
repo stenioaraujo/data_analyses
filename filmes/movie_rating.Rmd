@@ -83,38 +83,73 @@ Para responder a primeira questão, utilizaremos o bootstrap como ferramenta par
 Como a média foi escolhida para representar a avaliação geral, uma inferência em cima dessa medida foi feita. O processo de bootstrap para gerar o intervalo de confiança para a avaliação geral da população foi baseado no trabalho feito por [nazareno](https://github.com/nazareno/ciencia-de-dados-1/tree/master/4-Inferencia).
 
 O intervalo com confiança de 95% é mostrado abaixo
-```{r}
+```{r fig.width=10}
+bstrap_rating = function(toy, id, r, name, statistic, probs) {
+  rating = filter(toy, movieId == id)$rating
+  
+  b = bootstrap(rating, statistic, R = r,
+              statisticNames = name)
+  ci = CI.bca(b, probs = probs)
+  
+  return(ci)
+}
+
+chart_ics = function(df, medidas, title) {
+  df %>% 
+    ggplot(aes(x = medidas, ymin = X2.5., ymax = X97.5.)) + 
+    geom_errorbar(width = .2) +
+    theme_minimal() +
+    ggtitle(title) +
+    xlab("Intervalos de Confiança")
+}
+
 probs = c(0.025, 0.975)
+r = 1000
+mean = base::mean
 
-b = bootstrap(filter(toy_story, movieId == 1),
-              mean(rating), R = 10000,
-              statisticNames = "Toy Story (1995)")
-mean.t1 = CI.bca(b, probs = probs)
+t1 = bstrap_rating(toy_story, 1, r, "Toy Story (1995)", mean, probs)
+t2 = bstrap_rating(toy_story,  3114, r, "Toy Story 2 (1999)", mean, probs)
+t3 = bstrap_rating(toy_story, 78499, r, "Toy Story 3 (2010)", mean, probs)
+df = data.frame(rbind(t1, t2, t3))
 
-b = bootstrap(filter(toy_story, movieId == 3114),
-              mean(rating), R = 10000,
-              statisticNames = "Toy Story 2 (1999)")
-mean.t2 = CI.bca(b, probs = probs)
-
-b = bootstrap(filter(toy_story, movieId == 78499),
-              mean(rating), R = 10000,
-              statisticNames = "Toy Story 3 (2010)")
-mean.t3 = CI.bca(b, probs = probs)
-
-df = data.frame(rbind(mean.t1,
-                      mean.t2,
-                      mean.t3))
-
-df$medidas = row.names(df)
-
-df %>% 
-  ggplot(aes(x = df$medidas, ymin = X2.5., ymax = X97.5.)) + 
-  geom_errorbar(width = .2) +
-  theme_minimal() +
-  ggtitle("IC das Avaliações dos Filmes") +
-  xlab("Intervalos de confiança")
+chart_ics(df, row.names(df), "IC das Avaliações dos Filmes")
 ```
 
-Como os intervalos de confiança se sobrepõe, não é possível afirmar diretamente qual o filme que teve a melhor avaliação apenas olhando para os itnervalos de confiança separadamente.
+Como os intervalos de confiança se sobrepõe, não é possível afirmar diretamente qual o filme que teve a melhor avaliação apenas olhando para os itnervalos de confiança separadamente, eles existe significância nas estatísticas.
 
-[TODO]
+#### Para qual filme as avaliações variam mais?
+
+No caso da variação entre as avaliações, calculamos o desvio padrão entre estas avaliações e a média, nesse caso obtemos um IC da forma:
+```{r fig.width=10}
+t1 = bstrap_rating(toy_story, 1, r, "Toy Story (1995)", sd, probs)
+t2 = bstrap_rating(toy_story, 3114, r, "Toy Story 2 (1999)", sd, probs)
+t3 = bstrap_rating(toy_story, 78499, r, "Toy Story 3 (2010)", sd, probs)
+df = data.frame(rbind(t1, t2, t3))
+
+chart_ics(df, row.names(df), "IC da Variação das Avaliações dos Filmes")
+```
+
+O mesmo acontece com a variação entre as avaliações. Como os I.Cs para Toy Story e Toy Story 2 estão dentro do intervalo de Toy Story 3, todos os três desvios padrões podem ser o mesmo.
+
+Um dos fatores de o I.C do Toy Story 3 ter um intervalo maior que os demais, deve-se a quantidade de amostras que temos para este filme.
+
+Para responder a segunda pergunta, Existe uma relação entre em quantos gêneros os filmes se encaixam e a avaliação que os filmes recebem? Fazemos parecido ao primeiro, mas desta vez focando na quantidade de gêneros por filme
+
+```{r fig.width=10}
+bstrap_rating_by_genre = function(toy, n_genre, r, name, statistic, probs) {
+  rating = filter(toy, n_genres == n_genre)$rating
+  
+  b = bootstrap(rating, statistic, R = r,
+              statisticNames = name)
+  ci = CI.bca(b, probs = probs)
+  
+  return(ci)
+}
+
+t1 = bstrap_rating_by_genre(toy_story, 5, r, "5 genres", mean, probs)
+t2 = bstrap_rating_by_genre(toy_story, 6, r, "6 genres", mean, probs)
+df = data.frame(rbind(t1, t2))
+
+chart_ics(df, row.names(df), "IC das Avaliações dos Filmes baseado na Quantidade de Gêneros")
+```
+
