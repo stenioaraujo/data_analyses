@@ -104,7 +104,7 @@ chart_ics = function(df, medidas, title) {
 }
 
 probs = c(0.025, 0.975)
-r = 1000
+r = 10000
 mean = base::mean
 
 t1 = bstrap_rating(toy_story, 1, r, "Toy Story (1995)", mean, probs)
@@ -135,9 +135,19 @@ Um dos fatores de o I.C do Toy Story 3 ter um intervalo maior que os demais, dev
 
 Para responder a segunda pergunta, Existe uma relação entre em quantos gêneros os filmes se encaixam e a avaliação que os filmes recebem? Fazemos parecido ao primeiro, mas desta vez focando na quantidade de gêneros por filme
 
+```{r}
+movies_ratings %>%
+  group_by(n_genres) %>%
+  summarize(Filmes = n()) %>%
+  select("Número de Gêneros" = n_genres, Filmes) %>%
+  kable()
+```
+
+Analisando a quantidade de filmes em cada categoria decidi por apenas considerar as categorias que tenham mais que 100 filmes
+
 ```{r fig.width=10}
-bstrap_rating_by_genre = function(toy, n_genre, r, name, statistic, probs) {
-  rating = filter(toy, n_genres == n_genre)$rating
+bstrap_rating_by_genre = function(movies_, n_genre, r, name, statistic, probs) {
+  rating = filter(movies_, n_genres == n_genre, !is.na(rating))$rating
   
   b = bootstrap(rating, statistic, R = r,
               statisticNames = name)
@@ -146,10 +156,61 @@ bstrap_rating_by_genre = function(toy, n_genre, r, name, statistic, probs) {
   return(ci)
 }
 
-t1 = bstrap_rating_by_genre(toy_story, 5, r, "5 genres", mean, probs)
-t2 = bstrap_rating_by_genre(toy_story, 6, r, "6 genres", mean, probs)
-df = data.frame(rbind(t1, t2))
+genres = movies_ratings %>%
+  group_by(n_genres) %>%
+  summarise(filmes = n()) %>%
+  filter(filmes > 100) %>%
+  select(n_genres) %>%
+  unique()
+
+ts = rbind()
+for (i in sort(genres$n_genres)) {
+  t = bstrap_rating_by_genre(movies_ratings, i, r, sprintf("%02d gêneros", i), mean, probs)
+  ts = rbind(ts, t)
+}
+df = data.frame(ts)
 
 chart_ics(df, row.names(df), "IC das Avaliações dos Filmes baseado na Quantidade de Gêneros")
 ```
 
+Parece que o IC da avaliação para filmes com 07 gêneros é maior que todas as outras avaliações. Uma razão para isto ter acontecido não existe apenas olhando para os dados utilizados neste relatório. Um maior estudo é necessário.
+
+A média dos Filmes com a pior avaliação podem ser filmes com apenas um gênero, apenas olhando para o gráfico não é possível afirmar isso, aparentemente existe um intervalo que se sobrepões entre filmes com 1 gênero, e filmes com 6 gêneros.
+
+```{r fig.width=10}
+t1 = bstrap_rating_by_genre(movies_ratings, 1, r, "01 gêneros", mean, probs)
+t2 = bstrap_rating_by_genre(movies_ratings, 6, r, "06 gêneros", mean, probs)
+
+df = data.frame(rbind(t1, t2))
+df$medidas = row.names(df)
+
+chart_ics(df, df$medidas, "IC das Avaliações dos Filmes baseado na Quantidade de Gêneros")
+```
+
+
+Como as duas avaliações estão muito próximas, podemos calcular um intervalo de confiança com base na diferença entre as médias. Esses ICs podem ser calculados em dois cenários basicamente, quando a diferença é Pareada, e quando não é pareada.
+
+ - Ela é **PAREADA** quando em uma mesma entidade você calcula duas medidas. Por exemplo: Comparar o **número de mulheres** que assistem filmes de terror, e o **número de homens** que assistem filmes de terros. Neste caso a entidade **filme de terror** é a mesma, entretanto a medidade difere.
+ 
+ - Já **NÃO PAREADA** se refere a diferentes entidades mas a mesma medida. Por exemplo: Comparar a AVALIAÇÃO (uma medida) para filmes com 5 gêneros e filmes com 6 gêneros.
+
+O nosso caso é **não pareada** pois estamos comparando a **avaliação** entre filmes com 1 e 6 gêneros (duas entidades).
+
+```{r fig.width=10}
+ratings = movies_ratings %>%
+  filter(n_genres == 1 | n_genres == 6,
+         !is.na(rating))
+
+b.diff.means = bootstrap2(data = ratings$rating, 
+                          treatment = ratings$n_genres, 
+                          mean)
+
+means.diff = CI.percentile(b.diff.means, probs)
+
+data.frame(means.diff) %>% 
+  ggplot(aes(x = "Diferença", ymin = X2.5., ymax = X97.5.)) + 
+  geom_errorbar(width = .2) + 
+  geom_hline(yintercept = 0, colour = "darkorange")
+```
+
+Como a diferença não corta o zero, podemos afirmar que **sim** os filmes com apenas um gênero tiveram a pior avaliação nestes dados. Em um contexto d 95% de confiabilidade
