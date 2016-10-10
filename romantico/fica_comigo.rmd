@@ -1,0 +1,133 @@
+---
+title: "FicaComigo"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(modelr)
+library(broom)
+library(ggplot2)
+library(GGally)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(rio)
+
+# These make base models a little less surprising.
+# Options that make your life easier
+options(
+  contrasts = c("contr.treatment", "contr.treatment"),
+  na.option = na.exclude
+)
+
+dating = import("data/speed_dating.csv")
+```
+
+# Sobre
+
+Neste relatório utilizaremos dados de encontros relâmpagos (mais conhecidos como speed datings). Mais detalhes sobre a origem do dataset e de sua interpretação podem ser encontradas [aqui](https://github.com/nazareno/ciencia-de-dados-1/tree/master/5-regressao/speed-dating).
+
+Ao total temos 4918 inputs de participantes e seus encontros, estes por sua vez são descritos pelas seguintes variáveis.
+
+```{r}
+str(dating)
+```
+
+Mais detalhes sobre o significado de cada uma dessas variáveis pode ser encontradas no link citado anteriormente.
+
+É importante notar que os dados contindos neste dataset proveem de um formulário preenchido a mão. Alguns dos dados podem extrapolar o significado da variável a que se refere.
+
+Ainda sobre os dados, podemos ter uma rápida visão de como as variáveis se comportam em pares. Para isso foi decidido a remoção das colunas: amb, shar, match_es, attr3_s, sinc3_s, intel3_s, fun3_s, amb3_s. A decisão foi tomada para facilitar o foco deste relatório, também, devido a quantidade de inputs NA, os modelos poderiam ser prejudicados.
+
+```{r}
+sum_isna <- function(x) {
+  return(sum(is.na(x)))
+}
+number_nas = dating %>%
+  summarise_all(sum_isna) %>%
+  t()
+
+colnames(number_nas) <- "NAs"
+
+kable(number_nas)
+
+dating = dating %>%
+  select(-amb, -shar, -match_es, -attr3_s, -sinc3_s, -intel3_s, -fun3_s, -amb3_s)
+```
+
+No mesmo raciocíio as linhas com NA foram removidas.
+
+```{r}
+dating = dating %>%
+  na.omit()
+```
+
+Como o número de variáveis continua bastante grande, decidi por selecionar algumas para trabalhar com. Além disso fiz o match utilizando o pid disponível em cada input para ligar na mesma linha as informações do outro participante. As variáveis escolhidas após isto foram Elas foram: gender_p1, gender_p2, age_p1, age_p2, race_p1, race_p2, intel_p1, intel_p2, like_p1, like_p2
+
+```{r}
+# bw stands for both ways
+dating_bw = dating %>%
+  inner_join(dating, by=c("pid"="iid", "iid"="pid")) %>%
+  select(gender_p1 = gender.x,
+         gender_p2 = gender.y,
+         age_p1 = age.x,
+         age_p2 = age.y,
+         race_p1 = race.x,
+         race_p2 = race.y,
+         intel_p1 = intel.x,
+         intel_p2 = intel.y,
+         like = like.x)
+
+```
+
+O que me leva a me questionar em um primeiro momento, na visão do primeiro participante.
+
+#### O quão inteligente o participante um acha que o outro participante é pode influenciar no quanto este gosta do particpante dois?
+
+E em um segundo momento
+
+#### O quanto a idade de ambos influencia em quanto o participante um gosta do participante dois?
+
+# Repondendo as perguntas
+### O quão inteligente o participante um acha que o outro participante é pode influenciar no quanto este gosta do particpante dois?
+
+Essa pergunta surge principalmente do dizer comum: Gosto de alguém pela sua inteligência, não sua beleza. Neste contexto, decidi verificar o quanto a inteligência tem influência no quanto o participante um gosta do participante dois.
+
+```{r}
+ggplot(dating_bw, aes(intel_p1, like)) + 
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+
+ggplot(dating_bw, aes(intel_p1, like, group = intel_p1)) +
+  geom_boxplot()
+```
+
+
+
+```{r}
+ggplot(df, aes(x, y)) + 
+  geom_point()
+```
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
