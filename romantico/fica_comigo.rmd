@@ -104,6 +104,7 @@ ggplot(dating_bw, aes(intel_p1, like, group = intel_p1)) +
   geom_boxplot()
 ```
 
+Os dados não demostram ter um padrão óbvio 
 
 
 ```{r}
