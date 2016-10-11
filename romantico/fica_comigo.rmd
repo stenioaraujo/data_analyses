@@ -104,31 +104,93 @@ ggplot(dating_bw, aes(intel_p1, like, group = intel_p1)) +
   geom_boxplot()
 ```
 
-Os dados não demostram ter um padrão óbvio 
+Apesar de inconclusivo, o gráfico anterior tende a demonstrar superficialmente que quanto maior a inteligência, maior a chance de o participante um gostar do participante dois. Entretanto essa relação não pode ser considerada como determinante ao determinar o quanto a variável influência na outra. Neste caso uma decisão por aprofundar ainda mais a análise me leva há:
 
+### Regressão Linear Simples
+
+Como nossa intenção é verificar se o gostar pode ser previsto pelo quão inteligente o participante um acha que o participante dois é. Começamos por criando um modelo simples da relação (like ~ intel_p1). 
 
 ```{r}
-ggplot(df, aes(x, y)) + 
-  geom_point()
+model_intel = lm(like ~ intel_p1, data=dating_bw)
+summary(model_intel)
 ```
 
+A média dos resíduos se aproxima relativamente bem de zero, o que poderia nos levar a concluir que o modelo pode ser uma boa representação dos dados, entreatnto, os nossos mínimos e máximos mostram o contrário. Com um mínimo de -5.666 e um máximo de 5.784, é possível ver que não a média pode estar sendo definida por valores altos positivos e suas contraposições negativas.
 
-## R Markdown
+O Summary mostra que a variável inteligência pode ter uma grande correlação com gostar. O R² de ~24% nos leva a acreditar que uma parte considerável do gostar esta relacionada ao quão inteleginte o participante dois é para o participante um. Dentre as mais de 30 variáveis utilizadas no formulário, uma ter uma representatividade d 24% pode indicar uma variável de forte relevância para a variável gostar.
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+Dando uma avaliada no comportamento dos pontos residuais temos:
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+resid_intel = resid(model_intel)
+plot(dating_bw$intel_p1, resid_intel,
+     ylab="Pontos Residuais", xlab="Percepção inteligênia p2 por p1",
+     main="Relação do gostar entre P1 e P2")
+abline(0, 0)
 
-```{r cars}
-summary(cars)
+layout(matrix(c(1,2,3,4),2,2)) # optional 4 graphs/page 
+plot(model_intel)
+layout(c(1))
 ```
 
-## Including Plots
+Como demonstrado pelo summary(model_intel), os resíduos tem um padrão simetrico com relação a reta do modelo. O que pode causar uma média próxima a zero. Entretanto a distância entre esses e a linha do modelo não são próximas.
 
-You can also embed plots, for example:
+### Conclusão primeira pergunta,
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+grid = dating_bw %>% 
+  add_predictions(model = model_intel)
+
+ggplot(grid, aes(intel_p1)) + 
+  geom_point(aes(y = like), alpha = .8) + 
+  geom_line(aes(y = pred), colour = "red", size = 1) 
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Os resultados obtidos com a análise me leva a crer que sim, o quanto o participante um acha que o participante dois é inteligente tem uma relação com o quanto este gosta do participante dois. 
+
+Assim, podemos seguir para nossa segunda pergunta
+
+### O quanto a idade de ambos influencia em quanto o participante um gosta do participante dois?
+
+A itneção agora é verificar se a idade de ambos tem alguma relação com o gostar. Se de alguma forma for possível verificar se pessoas com a mesma idade tendem a ter uma maior interesse entre si, se o participante dois tem uma idade aproximada ao participante um, o participante um gostaria mais do participante dois? As seguintes análises podem nos guiar a uma conclusão que pode satisfazer essas dúvidas.
+
+Um breve sumário do comportamento de mabas as variáveis, age_p1 e age_p2.
+
+```{r}
+select(dating_bw, age_p1, age_p2) %>% summary()
+
+dating_age = dating_bw %>%
+  select(like, age_p1, age_p2)
+
+ggpairs(dating_age)
+```
+
+Os gráficos quando colocados par a par não parecem demonstrar nenhuma relação entre si, entretanto, como gostar se comporta com relação a amabas as idades?
+
+```{r}
+model_age = lm(like ~ age_p1 + age_p2, data = dating_age)
+
+summary(model_age)
+```
+
+Num primeiro momento, com os dados fornecidos pelo Estimate, poderiamos supor que a idade tem uma influência negativa no gostar. Entretanto, o R² tem um valor muito baixo, oq pode nos levar a concluir que as variáveis não tem tanto impacto no gostar. Se tentarmos expandir isto para um nível de população, teriamos:
+
+```{r}
+tidy(model_age, conf.int = TRUE)
+```
+
+Os intervalos de confiança para ambas se aproximam bastante de zero, embora se mantenham sempre negativos. Confirmando a interpretação de que a idade pode influenciar negativamente  Se olharmos os resíduos dos valores gerados a partir deste modelo com os reais teriamos:
+
+```{r}
+resid_age = resid(model_age)
+
+layout(matrix(c(1,2,3,4),2,2)) # optional 4 graphs/page 
+plot(model_age)
+layout(c(1))
+```
+
+# Conclusão
+
+Em ambas as perguntas a variável gostar foi utilizada como variável a ser prevista. A primeira pergunta levantou o questionamento de se o fato de o participante um achar o participante dois inteligente poderia ter uma influência, ou poderia estar relacionada a forma que gostar se comportava. Os dados e análises me levam a acreditar que sim, a inteligência o gostar tem uma relação e podemos prever grande parte de gostar possuindo apenas o quanto o participante um acha o participante dois inteligente.
+
+Ao contrário da primeira pergunta, a segunda não demonstrou ter uma significância estatistica que possibilitasse concluir que a idade tenha alguma característica previsiva com relação ao gostar. Desta forma, concluí que amabas as variáveis não predisem com grande influência a variável like.
