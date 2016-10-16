@@ -1,0 +1,173 @@
+---
+title: "FicaComigo"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(broom)
+library(dplyr)
+library(GGally)
+library(ggplot2)
+library(knitr)
+library(modelr)
+library(pscl)
+library(rio)
+library(stargazer)
+library(tidyr)
+
+select <- dplyr::select
+
+# These make base models a little less surprising.
+# Options that make your life easier
+options(
+  contrasts = c("contr.treatment", "contr.treatment"),
+  na.option = na.exclude
+)
+
+dating = import("data/speed_dating_with_matching.csv")
+```
+
+# Sobre
+
+Neste relatório utilizaremos dados de encontros relâmpagos (mais conhecidos como speed datings). Mais detalhes sobre a origem do dataset e de sua interpretação podem ser encontradas [aqui](https://github.com/nazareno/ciencia-de-dados-1/tree/master/5-regressao/speed-dating). Nesta versão em particular estaremos utilizando o arquivo [speed-dating2.csv](https://github.com/nazareno/ciencia-de-dados-1/blob/master/5-regressao/speed-dating/speed-dating2.csv).
+
+Ao total temos 4918 inputs de participantes e seus encontros, estes por sua vez são descritos pelas seguintes variáveis.
+
+```{r}
+str(dating)
+```
+
+Mais detalhes sobre o significado de cada uma dessas variáveis pode ser encontradas no link citado anteriormente.
+
+É importante notar que os dados contindos neste dataset proveem de um formulário preenchido a mão. Alguns dos dados podem extrapolar o significado da variável a que se refere.
+
+Ainda sobre os dados, podemos ter uma rápida visão de como as variáveis se comportam em pares. Para isso foi decidido a remoção das colunas: amb, shar, match_es, attr3_s, sinc3_s, intel3_s, fun3_s, amb3_s. A decisão foi tomada para facilitar o foco deste relatório, também, devido a quantidade de inputs NA, os modelos poderiam ser prejudicados.
+
+```{r}
+sum_isna <- function(x) {
+  return(sum(is.na(x)))
+}
+number_nas = dating %>%
+  summarise_all(sum_isna) %>%
+  t()
+
+colnames(number_nas) <- "NAs"
+
+kable(number_nas)
+
+dating = dating %>%
+  select(-amb, -shar, -match_es, -attr3_s, -sinc3_s, -intel3_s, -fun3_s, -amb3_s)
+```
+
+No mesmo raciocíio as linhas com NA foram removidas.
+
+```{r}
+dating = dating %>%
+  na.omit()
+```
+
+No speed-dating2 temos uma nova variável chamada de dec, esta variável é uma afirmativa tomada com base nos intereses de ambos os participantes em se encontrar novamente.
+
+Como o número de variáveis continua bastante grande, decidi por selecionar algumas para trabalhar com. Além disso fiz o match utilizando o pid disponível em cada input para ligar na mesma linha as informações do outro participante. As variáveis escolhidas após isto foram Elas foram: gender_p1, gender_p2, age_p1, age_p2, attr_p1, attr_p2, intel_p1, intel_p2 e match.
+
+```{r}
+# bw stands for both ways
+dating_bw = dating %>%
+  inner_join(dating, by=c("pid"="iid", "iid"="pid")) %>%
+  mutate(match = as.factor(dec.x)) %>%
+  select(gender_p1 = gender.x,
+         gender_p2 = gender.y,
+         age_p1 = age.x,
+         age_p2 = age.y,
+         attr_p1 = attr.x,
+         attr_p2 = attr.y,
+         intel_p1 = intel.x,
+         intel_p2 = intel.y,
+         match)
+```
+
+O que me leva a me questionar em um primeiro momento, na visão do primeiro participante.
+
+#### O quão inteligente o participante um acha que o outro participante é pode influenciar no match entre ambos?
+
+E em um segundo momento
+
+#### O quanto a atração entre ambos influencia se o participante um faz match com o participante dois?
+
+# Repondendo as perguntas
+### O quão inteligente o participante um acha que o outro participante é pode influenciar no match entre ambos?
+
+Essa pergunta surge principalmente do dizer comum: Gosto de alguém pela sua inteligência, não sua beleza. Neste contexto, decidi verificar o quanto a inteligência tem influência no match.
+
+### Regressão Logística
+
+Como nossa intenção é verificar se o match pode ser previsto pelo quão inteligente o participante um acha que o participante dois é. Começamos por criando um modelo simples da relação (match ~ intel_p1). 
+
+```{r}
+model_intel = glm(match ~ intel_p1, 
+                  data = dating_bw, 
+                  family = "binomial")
+
+summary(model_intel)
+```
+
+O coeficiente de intel_p1 (o quanto o participante um acha que o participante dois é) é **positivo** e bastante significante. A cada unidade que o participante um acha o participante dois inteligente, há um aumento de 0.28 no valor, o que pode significar que a inteligência aumenta drasticamente a chance de match.
+
+Outra forma de ver os mesmos valores é através do exponencial dos coeficientes.
+
+```{r}
+tidy(model_intel, conf.int = TRUE, exponentiate = TRUE)
+```
+
+Podemos ainda calcular a probabilidade de intel_p1 ter efeito sobre match.
+
+```{r}
+test <- data.frame(intel_p1=sort(unique(dating_bw$intel_p1)))
+test$pred <- predict(model_intel, test, type="response")
+kable(test)
+```
+
+O valor máximo (10) faz com que a probabilidade de match em 60%.
+
+Assim, podemos seguir para nossa segunda pergunta
+
+### O quanto a idade de ambos influencia na chance de haver match?
+
+A itneção agora é verificar se a idade de ambos tem alguma relação com o match.
+
+Um breve sumário do comportamento de mabas as variáveis, age_p1 e age_p2.
+
+```{r}
+select(dating_bw, age_p1, age_p2) %>%
+  summary()
+
+dating_age = dating_bw %>%
+  select(match, age_p1, age_p2)
+
+ggpairs(dating_age)
+```
+
+Os gráficos quando colocados par a par não parecem demonstrar nenhuma relação entre si, entretanto, como match se comporta com relação a amabas as idades?
+
+```{r}
+model_age = glm(match ~ age_p1 + age_p2, data = dating_age, family = "binomial")
+
+summary(model_age)
+tidy(model_age, conf.int = TRUE, exponentiate = TRUE)
+```
+
+Os resultados demostram que as idades tem um efeito negativo sobre o match. Por exemplo. Se a idade do participante um for alta e a idade do participante dois for alta, a chance de haver match é menor do que se ambos fossem mais novos. Uma possível suposiição seria que os participantes deste tipo de dating estão interessado em pessoas novas (mesmo as com idade mais elevada). Isto é apenas uma suposição pois não foi inferido isto dos dos dados.
+
+Entretanto, o impacto da idade não é tão significativo como o da inteligência.
+
+# Conclusão
+
+```{r}
+stargazer(model_intel, model_age, type="text")
+```
+
+Em ambas as perguntas a variável match foi utilizada como variável a ser prevista (variável depedente). A primeira pergunta levantou o questionamento de se o fato de o participante um achar o participante dois inteligente poderia ter uma influência, ou poderia estar relacionada com o match se comporta. Os dados e análises me levam a acreditar que sim, a inteligência e o match tem uma relação e podemos prever uma grande chance de match possuindo apenas o quanto o participante um acha o participante dois inteligente.
+
+Ao contrário da primeira pergunta, a segunda não demonstrou ter uma significância estatistica que possibilitasse concluir que a idade tenha alguma característica previsiva com relação ao match.
